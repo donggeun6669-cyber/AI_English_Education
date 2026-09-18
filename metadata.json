@@ -1,0 +1,6 @@
+{
+  "name": "Help Animals Home!",
+  "description": "문법을 규칙으로만 외우는 중학교 1~2학년을 위한 3분짜리 어순 중심 문장 만들기 게임 - 길 잃은 동물 집 찾아주기",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
