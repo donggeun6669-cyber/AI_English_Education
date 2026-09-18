@@ -161,6 +161,12 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     }, 3400);
   }, [currentIndex, currentSentence, currentAnimal, placedWords, config.timePerQuestion, history, isMuted, onFinishGame, questions.length, score]);
 
+  // Keep latest handleTimeout in ref so timer doesn't restart when placedWords changes
+  const handleTimeoutRef = useRef(handleTimeout);
+  useEffect(() => {
+    handleTimeoutRef.current = handleTimeout;
+  }, [handleTimeout]);
+
   // Sunset Countdown Timer
   useEffect(() => {
     if (feedbackStatus === 'correct' || feedbackStatus === 'timeout') {
@@ -171,7 +177,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       setTimeLeft((prev) => {
         if (prev <= 1) {
           clearInterval(timerRef.current!);
-          handleTimeout();
+          handleTimeoutRef.current();
           return 0;
         }
         if (prev <= 5) {
@@ -185,7 +191,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     return () => {
       if (timerRef.current) clearInterval(timerRef.current);
     };
-  }, [feedbackStatus, currentIndex, handleTimeout]);
+  }, [feedbackStatus, currentIndex]);
 
   // Cleanup timers & TTS on unmount
   useEffect(() => {

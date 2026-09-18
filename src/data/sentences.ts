@@ -249,10 +249,10 @@ export const ALL_SENTENCES: Sentence[] = [
   {
     id: 'l3-6',
     level: 3,
-    words: ['She', 'is', 'listening', 'to', 'sweet', 'music', 'now'],
-    korean: '그녀는 지금 감미로운 음악을 듣고 있다.',
-    grammarTip: '현재진행형은 be동사(is) + -ing(listening) 형태이며, listen은 전치사 to와 짝을 이룹니다.',
-    structure: '주어 + be동사 + 동사-ing + to + 목적어 + 부사 now',
+    words: ['She', 'is', 'playing', 'the', 'piano', 'very', 'well'],
+    korean: '그녀는 피아노를 아주 잘 연주하고 있다.',
+    grammarTip: '현재진행형은 be동사(is) + -ing(playing) 형태이며, 악기 앞에는 the가 붙고, 양태 부사구(very well)는 문장 끝(목적어 뒤)에만 위치합니다.',
+    structure: '주어 + be동사 + 동사-ing + 목적어 + 부사구(very well)',
     animalId: 'kitten',
   },
   {
@@ -285,10 +285,10 @@ export const ALL_SENTENCES: Sentence[] = [
   {
     id: 'l3-10',
     level: 3,
-    words: ['I', 'will', 'meet', 'my', 'best', 'friend', 'soon'],
-    korean: '나는 곧 나의 가장 친한 친구를 만날 것이다.',
-    grammarTip: '주어(I) + 조동사 will + 본동사 meet + 소유격 목적어(my best friend) + 시간 부사(soon) 순서입니다.',
-    structure: '주어 + will + 동사원형 + 목적어 + 시간부사',
+    words: ['I', 'will', 'meet', 'my', 'best', 'friend', 'tonight'],
+    korean: '나는 오늘 밤 나의 가장 친한 친구를 만날 것이다.',
+    grammarTip: '주어(I) + 조동사 will + 본동사 meet + 소유격 목적어(my best friend) 뒤에 특정 시간 부사(tonight)가 옵니다. tonight은 문장 끝에 위치합니다.',
+    structure: '주어 + will + 동사원형 + 목적어 + 시간부사(tonight)',
     animalId: 'hamster',
   },
 ];
