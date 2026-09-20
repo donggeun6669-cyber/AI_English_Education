@@ -7,12 +7,21 @@ interface AnimalRoadToHomeProps {
   animal: Animal;
   status: 'wandering' | 'thinking' | 'walking_home' | 'safe_home' | 'sunset_walk';
   timeLeft: number;
+  /** 0 ~ 1. 빈칸을 채운 비율. 채운 만큼 동물이 집 쪽으로 걸어간다 */
+  progress?: number;
+  /** 오답을 확인한 직후. 동물이 멈춰서 고개를 갸웃한다 */
+  isConfused?: boolean;
+  /** 문제가 바뀔 때마다 동물을 출발점에서 새로 시작시키기 위한 키 */
+  questionKey?: string | number;
 }
 
 export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
   animal,
   status,
   timeLeft,
+  progress = 0,
+  isConfused = false,
+  questionKey = 'q',
 }) => {
   const roadRef = useRef<HTMLDivElement>(null);
   const [roadWidth, setRoadWidth] = useState<number>(360);
@@ -32,9 +41,10 @@ export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
     return () => ro.disconnect();
   }, []);
 
-  const isTwilight = timeLeft <= 5 && status === 'wandering';
   const isHeadingHome = status === 'walking_home' || status === 'safe_home';
   const isSunsetWalk = status === 'sunset_walk';
+  const isWalking = isHeadingHome || isSunsetWalk;
+  const isTwilight = timeLeft <= 5 && status === 'wandering' && !isConfused;
 
   // Speech bubble text
   let speechText = animal.lostSoundText;
@@ -42,6 +52,8 @@ export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
     speechText = animal.homeSoundText;
   } else if (isSunsetWalk) {
     speechText = '바른 길을 보고 무사히 집에 도착했어요!';
+  } else if (isConfused) {
+    speechText = '어? 이 길이 아닌 것 같아… 다시 알려줘!';
   } else if (isTwilight) {
     speechText = '어둑어둑해지고 있어, 집으로 가는 길을 서둘러 알려줘!';
   }
@@ -49,6 +61,53 @@ export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
   // Exact distance to travel from start position (left: 16px) to right house door
   // Animal width is ~48px, house width is ~64px, padding is 16px
   const travelDistance = Math.max(180, roadWidth - 105);
+
+  // 빈칸을 채운 만큼 길의 80%까지 한 걸음씩 전진한다.
+  // 남은 20%(집 앞 마지막 구간)는 정답을 맞혔을 때만 걸어 들어간다.
+  const filledRatio = Math.max(0, Math.min(1, progress));
+  const stepX = travelDistance * 0.8 * filledRatio;
+
+  // 현재 서 있는 자리에서 집까지 이어지는 걸음 키프레임
+  const walkFrom = (from: number) => [
+    from,
+    from + (travelDistance - from) * 0.35,
+    from + (travelDistance - from) * 0.7,
+    travelDistance,
+  ];
+
+  // x(이동) / y(제자리 들썩임)를 분리한다.
+  // 무한 반복(repeat: Infinity)은 y 에만 걸어야 한다. x 에 걸면 집↔출발점을 계속 오간다.
+  const animalAnimate = isHeadingHome
+    ? {
+        x: walkFrom(stepX),
+        y: [0, -14, 0, -16, 0],
+        scale: [1, 1.08, 1, 1.12, 1],
+      }
+    : isSunsetWalk
+    ? {
+        x: walkFrom(stepX),
+        y: [0, -8, 0, -8, 0],
+        scale: 1,
+      }
+    : {
+        x: stepX,
+        y: [0, -4, 0],
+        scale: 1,
+      };
+
+  const walkDuration = isHeadingHome ? 1.6 : 2.3;
+
+  const animalTransition = isWalking
+    ? {
+        x: { duration: walkDuration, ease: 'easeInOut' as const },
+        y: { duration: walkDuration, ease: 'easeInOut' as const },
+        scale: { duration: walkDuration, ease: 'easeInOut' as const },
+      }
+    : {
+        x: { type: 'spring' as const, stiffness: 150, damping: 18, mass: 0.6 },
+        y: { duration: 1.4, repeat: Infinity, ease: 'easeInOut' as const },
+        scale: { duration: 0.3 },
+      };
 
   return (
     <div className="relative w-full py-2 px-1 select-none">
@@ -66,6 +125,8 @@ export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
               ? 'bg-emerald-50 text-emerald-900 border-emerald-300 ring-2 ring-emerald-200'
               : isSunsetWalk
               ? 'bg-amber-100 text-amber-900 border-amber-300'
+              : isConfused
+              ? 'bg-sky-50 text-sky-900 border-sky-200'
               : isTwilight
               ? 'bg-orange-50 text-orange-900 border-orange-200'
               : 'bg-white/95 text-stone-700 border-stone-200'
@@ -105,45 +166,13 @@ export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
           <div className="w-1 h-3 bg-amber-700/60 rounded-full" />
         </div>
 
-        {/* The Walking Animal (Runs smoothly and continuously all the way into the house) */}
+        {/* The Walking Animal
+            key: 문제가 바뀌면 통째로 다시 마운트되어 항상 출발점(x: 0)에서 시작한다 */}
         <motion.div
-          animate={
-            isHeadingHome
-              ? {
-                  x: [
-                    0,
-                    travelDistance * 0.2,
-                    travelDistance * 0.4,
-                    travelDistance * 0.6,
-                    travelDistance * 0.8,
-                    travelDistance,
-                  ],
-                  y: [0, -14, 0, -14, 0, -16, 0],
-                  scale: [1, 1.08, 1, 1.08, 1, 1.15, 1],
-                }
-              : isSunsetWalk
-              ? {
-                  x: [
-                    0,
-                    travelDistance * 0.25,
-                    travelDistance * 0.5,
-                    travelDistance * 0.75,
-                    travelDistance,
-                  ],
-                  y: [0, -8, 0, -8, 0, -8, 0],
-                  scale: [1, 1.02, 1, 1.02, 1],
-                }
-              : {
-                  x: 0,
-                  y: [0, -4, 0],
-                  scale: 1,
-                }
-          }
-          transition={{
-            duration: isHeadingHome ? 2.0 : isSunsetWalk ? 2.3 : 1.4,
-            repeat: isHeadingHome || isSunsetWalk ? 0 : Infinity,
-            ease: isHeadingHome || isSunsetWalk ? 'easeInOut' : 'easeInOut',
-          }}
+          key={questionKey}
+          initial={{ x: 0, y: 0, scale: 1 }}
+          animate={animalAnimate}
+          transition={animalTransition}
           className="absolute bottom-3 left-4 z-20 flex flex-col items-center"
         >
           {/* Hearts eruption when entering the home */}
@@ -156,7 +185,7 @@ export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
                   y: [0, -15, -28, -36],
                   scale: [0.6, 1.2, 1.4, 1.1],
                 }}
-                transition={{ duration: 1.8, delay: 1.0 }}
+                transition={{ duration: 1.3, delay: 1.0 }}
                 className="absolute -top-4 flex items-center gap-1 text-rose-500 pointer-events-none z-30"
               >
                 <Heart className="w-5 h-5 fill-rose-500 animate-ping" />
@@ -165,10 +194,32 @@ export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
             )}
           </AnimatePresence>
 
-          {/* Animal Emoji */}
-          <span className="text-4xl sm:text-5xl filter drop-shadow-md cursor-pointer hover:scale-110 transition-transform">
+          {/* 길을 헷갈릴 때 뜨는 작은 물음표 */}
+          <AnimatePresence>
+            {isConfused && (
+              <motion.span
+                initial={{ opacity: 0, y: 4, scale: 0.7 }}
+                animate={{ opacity: 1, y: -2, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.7 }}
+                className="absolute -top-3 text-sm text-sky-600 font-black pointer-events-none z-30"
+              >
+                ?
+              </motion.span>
+            )}
+          </AnimatePresence>
+
+          {/* Animal Emoji (길을 헷갈리면 고개를 갸웃거린다) */}
+          <motion.span
+            animate={isConfused ? { rotate: [0, -9, 9, -6, 0] } : { rotate: 0 }}
+            transition={
+              isConfused
+                ? { duration: 1.1, repeat: Infinity, repeatDelay: 0.6, ease: 'easeInOut' }
+                : { duration: 0.3 }
+            }
+            className="text-4xl sm:text-5xl filter drop-shadow-md cursor-pointer inline-block origin-bottom"
+          >
             {animal.emoji}
-          </span>
+          </motion.span>
           <span className="text-[10px] font-extrabold text-stone-700 bg-white/90 px-1.5 py-0.2 rounded-full border border-stone-200 shadow-2xs mt-0.5 whitespace-nowrap">
             {animal.name}
           </span>
@@ -181,7 +232,7 @@ export const AnimalRoadToHome: React.FC<AnimalRoadToHomeProps> = ({
               ? { scale: [1, 1, 1.08, 1], y: [0, 0, -4, 0] }
               : {}
           }
-          transition={{ duration: 0.6, delay: 1.6 }}
+          transition={{ duration: 0.6, delay: 1.4 }}
           className="absolute bottom-2 right-3 z-15 flex flex-col items-center"
         >
           {/* Chimney smoke puffs */}

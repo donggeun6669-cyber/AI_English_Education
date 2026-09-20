@@ -95,8 +95,8 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
           {isPerfect
             ? '모든 동물 귀가 완료!'
             : rescuedCount > 0
-            ? '안전하게 집 도착 완료!'
-            : '다음엔 꼭 다 집으로 안내할 수 있어요!'}
+            ? '모두 무사히 집에 도착!'
+            : '동물 친구들 모두 집에 도착!'}
         </h2>
         <p className="text-xs sm:text-sm text-stone-600 font-medium mt-1">
           {LEVEL_CONFIGS[level].name} 미션을 마쳤습니다.
@@ -105,15 +105,15 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
 
       {/* Main Stats Cards Grid */}
       <div className="grid grid-cols-3 gap-2.5 my-4">
-        {/* Rescued Animals Count (Prompt requirement: '구한 동물' -> '집에 데려다준 동물') */}
+        {/* 동물은 모두 집에 도착하므로, 이 숫자는 '스스로 어순을 완성한 문장 수'다 */}
         <div className="p-3 rounded-2xl bg-white border border-stone-200 shadow-xs flex flex-col items-center text-center">
-          <span className="text-[10px] sm:text-[11px] font-bold text-stone-400 leading-tight">집에 데려다준 동물</span>
+          <span className="text-[10px] sm:text-[11px] font-bold text-stone-400 leading-tight">스스로 길 안내 성공</span>
           <div className="flex items-baseline gap-0.5 mt-0.5">
             <span className="text-2xl font-black text-emerald-600">{rescuedCount}</span>
             <span className="text-xs text-stone-400 font-bold">/{totalCount}마리</span>
           </div>
           <span className="text-[10px] text-emerald-700 font-bold mt-1 bg-emerald-50 px-1.5 py-0.5 rounded-full">
-            {accuracy}% 귀가
+            {accuracy}% 성공
           </span>
         </div>
 
@@ -154,10 +154,14 @@ export const ResultScreen: React.FC<ResultScreenProps> = ({
             >
               <span>{h.animal.emoji}</span>
               <span>{h.animal.name}</span>
+              {/* 동물은 모두 집에 도착한다. 차이는 "스스로 어순을 완성했는가" 뿐이다 */}
               {h.isCorrect ? (
-                <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                <>
+                  <CheckCircle2 className="w-3 h-3 text-emerald-600" />
+                  <span className="text-[10px] text-emerald-700 font-bold">길 안내 성공</span>
+                </>
               ) : (
-                <span className="text-[10px] text-amber-600 font-bold">집 도착</span>
+                <span className="text-[10px] text-amber-600 font-bold">다시 연습</span>
               )}
             </div>
           ))}

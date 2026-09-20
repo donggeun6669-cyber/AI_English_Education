@@ -46,8 +46,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const currentAnimal: Animal = getAnimalById(currentSentence?.animalId);
 
   // Score & Streak
+  // 점수는 setTimeout / 버튼 콜백에서도 최신 값이 필요하므로 ref 를 함께 둔다
   const [score, setScore] = useState(0);
+  const scoreRef = useRef<number>(0);
   const [combo, setCombo] = useState(0);
+
+  const addScore = (points: number) => {
+    scoreRef.current += points;
+    setScore(scoreRef.current);
+  };
 
   // Slots state: array of (string | null) for the sentence
   const [placedWords, setPlacedWords] = useState<(string | null)[]>([]);
@@ -70,12 +77,31 @@ export const GameScreen: React.FC<GameScreenProps> = ({
   const nextTimerRef = useRef<number | null>(null);
 
   // History tracking
-  const [history, setHistory] = useState<GameHistoryItem[]>([]);
+  // state 대신 ref 를 쓴다. 타이머 콜백이나 [다음 동물 돕기] 버튼에서
+  // 오래된 값(stale closure)을 읽어 기록이 누락되는 것을 막기 위함.
+  const historyRef = useRef<GameHistoryItem[]>([]);
   const attemptsRef = useRef<number>(1);
   const timeSpentRef = useRef<number>(0);
+  // 한 문제당 결과는 한 번만 기록한다 (StrictMode 중복 호출 방지)
+  const settledIndexRef = useRef<number>(-1);
+
+  const recordHistory = (item: GameHistoryItem) => {
+    historyRef.current = [...historyRef.current, item];
+  };
+
+  // 정답 확인 / 일몰 시점에 동물이 서 있던 위치를 고정해 둔다.
+  // (일몰 시 정답 단어를 빈칸에 채워 넣기 때문에 채움 비율이 갑자기 1이 되어 버린다)
+  const [walkFromProgress, setWalkFromProgress] = useState<number | null>(null);
+
+  // 지금 화면의 placedWords 가 어느 문장의 것인지 기록한다.
+  // 문제가 바뀐 직후 한 프레임 동안은 아직 이전 문제의 값이 남아 있어서,
+  // 이 값이 없으면 동물이 잠깐 앞으로 튀었다가 되돌아온다.
+  const loadedSentenceIdRef = useRef<string | null>(null);
 
   // Initialize a new question
   const loadQuestion = useCallback((sentence: Sentence) => {
+    loadedSentenceIdRef.current = sentence.id;
+
     // Target slots equal to number of words in sentence
     setPlacedWords(new Array(sentence.words.length).fill(null));
 
@@ -90,6 +116,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     setWrongIndices([]);
     setFeedbackMessage('');
     setShowHint(false);
+    setWalkFromProgress(null);
     setTimeLeft(config.timePerQuestion);
     attemptsRef.current = 1;
     timeSpentRef.current = 0;
@@ -104,62 +131,46 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
   // Handle Sunset Timeout (Time Ran Out)
   const handleTimeout = useCallback(() => {
+    if (!currentSentence) return;
+    if (settledIndexRef.current === currentIndex) return;
+    settledIndexRef.current = currentIndex;
+
     sound.playGentleSunset();
+
+    // 정답을 표지판에 채워 넣기 전에, 동물이 서 있던 자리를 먼저 기억해 둔다
+    const filledCount = placedWords.filter(Boolean).length;
+    setWalkFromProgress(
+      currentSentence.words.length > 0 ? filledCount / currentSentence.words.length : 0
+    );
+
     setFeedbackStatus('timeout');
     setFeedbackMessage('🌅 해가 저물었어요! 바른 길 표지판을 보고 동물 친구가 무사히 집에 도착했어요.');
     setCombo(0);
 
     // Reveal correct words on the road signpost
-    if (currentSentence) {
-      setPlacedWords(currentSentence.words);
-      setAvailableWords([]);
+    setPlacedWords(currentSentence.words);
+    setAvailableWords([]);
 
-      // Read correct sentence with TTS warmly
-      if (!isMuted) {
-        setTimeout(() => {
-          tts.speak(currentSentence.words.join(' '));
-        }, 350);
-      }
+    // Read correct sentence with TTS warmly
+    if (!isMuted) {
+      setTimeout(() => {
+        tts.speak(currentSentence.words.join(' '));
+      }, 350);
     }
 
     // Record history
-    const userOrder = placedWords.map((w) => w || '(미완성)');
-    setHistory((prev) => [
-      ...prev,
-      {
-        sentence: currentSentence,
-        animal: currentAnimal,
-        userOrder,
-        isCorrect: false,
-        attempts: attemptsRef.current,
-        timeSpent: config.timePerQuestion,
-      },
-    ]);
+    recordHistory({
+      sentence: currentSentence,
+      animal: currentAnimal,
+      userOrder: placedWords.map((w) => w || '(미완성)'),
+      isCorrect: false,
+      attempts: attemptsRef.current,
+      timeSpent: config.timePerQuestion,
+    });
 
-    // Auto advance after giving time to observe correct sentence
-    if (nextTimerRef.current) clearTimeout(nextTimerRef.current);
-    nextTimerRef.current = window.setTimeout(() => {
-      tts.stop();
-      if (currentIndex + 1 < questions.length) {
-        setCurrentIndex((prev) => prev + 1);
-      } else {
-        onFinishGame(
-          [
-            ...history,
-            {
-              sentence: currentSentence,
-              animal: currentAnimal,
-              userOrder,
-              isCorrect: false,
-              attempts: attemptsRef.current,
-              timeSpent: config.timePerQuestion,
-            },
-          ],
-          score
-        );
-      }
-    }, 3400);
-  }, [currentIndex, currentSentence, currentAnimal, placedWords, config.timePerQuestion, history, isMuted, onFinishGame, questions.length, score]);
+    // 자동으로 넘어가지 않는다. 학습자가 바른 문장을 충분히 읽은 뒤
+    // [다음 동물 돕기] 버튼을 눌러야 다음 문제로 간다.
+  }, [currentIndex, currentSentence, currentAnimal, placedWords, config.timePerQuestion, isMuted]);
 
   // Keep latest handleTimeout in ref so timer doesn't restart when placedWords changes
   const handleTimeoutRef = useRef(handleTimeout);
@@ -212,6 +223,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     if (wrongIndices.length > 0) {
       setWrongIndices([]);
       setFeedbackMessage('');
+      setFeedbackStatus('idle');
     }
 
     // Find first empty slot index
@@ -239,6 +251,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     if (wrongIndices.length > 0) {
       setWrongIndices([]);
       setFeedbackMessage('');
+      setFeedbackStatus('idle');
     }
 
     // Remove from slot
@@ -268,6 +281,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     setAvailableWords(shuffleArray(pieces));
     setWrongIndices([]);
     setFeedbackMessage('');
+    setFeedbackStatus('idle');
   };
 
   // Check Answer Button Handler
@@ -278,7 +292,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     const hasEmptySlot = placedWords.some((w) => w === null);
     if (hasEmptySlot) {
       sound.playTap();
-      setFeedbackMessage('모든 빈칸에 단어 조각을 채워 길을 완성해주세요!');
+      setFeedbackMessage('아직 빈 자리가 남았어요. 단어를 모두 놓아 주세요!');
       return;
     }
 
@@ -293,10 +307,13 @@ export const GameScreen: React.FC<GameScreenProps> = ({
 
     if (mismatches.length === 0) {
       // 100% CORRECT! Animal walks safely home!
+      if (settledIndexRef.current === currentIndex) return;
+      settledIndexRef.current = currentIndex;
+
       sound.playRescue();
       setFeedbackStatus('correct');
       const pointEarned = 10 + (combo > 0 ? 2 : 0);
-      setScore((prev) => prev + pointEarned);
+      addScore(pointEarned);
       setCombo((prev) => prev + 1);
 
       const fullSentence = targetWords.join(' ');
@@ -315,17 +332,14 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       );
 
       // Record history
-      setHistory((prev) => [
-        ...prev,
-        {
-          sentence: currentSentence,
-          animal: currentAnimal,
-          userOrder: placedWords as string[],
-          isCorrect: true,
-          attempts: attemptsRef.current,
-          timeSpent: config.timePerQuestion - timeLeft,
-        },
-      ]);
+      recordHistory({
+        sentence: currentSentence,
+        animal: currentAnimal,
+        userOrder: placedWords as string[],
+        isCorrect: true,
+        attempts: attemptsRef.current,
+        timeSpent: config.timePerQuestion - timeLeft,
+      });
 
       // Move to next question automatically after animal hops home & TTS plays
       if (nextTimerRef.current) clearTimeout(nextTimerRef.current);
@@ -335,20 +349,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
           setCurrentIndex((prev) => prev + 1);
         } else {
           // Finished all questions!
-          onFinishGame(
-            [
-              ...history,
-              {
-                sentence: currentSentence,
-                animal: currentAnimal,
-                userOrder: placedWords as string[],
-                isCorrect: true,
-                attempts: attemptsRef.current,
-                timeSpent: config.timePerQuestion - timeLeft,
-              },
-            ],
-            score + pointEarned
-          );
+          onFinishGame(historyRef.current, scoreRef.current);
         }
       }, 2600);
     } else {
@@ -361,7 +362,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       // Construct educational feedback pointing out wrong positions
       const wrongPositionsKorean = mismatches.map((i) => `${i + 1}번째`).join(', ');
       setFeedbackMessage(
-        `⚠️ ${wrongPositionsKorean} 단어가 올바르지 않아요! 빨간색 자리를 터치해 바꿔보세요.`
+        `${wrongPositionsKorean} 자리를 다시 살펴볼까요? 표시된 자리를 터치하면 단어를 되돌릴 수 있어요.`
       );
     }
   };
@@ -373,9 +374,24 @@ export const GameScreen: React.FC<GameScreenProps> = ({
     if (currentIndex + 1 < questions.length) {
       setCurrentIndex((prev) => prev + 1);
     } else {
-      onFinishGame(history, score);
+      // ref 를 쓰므로 일몰로 기록된 마지막 문제까지 빠짐없이 전달된다
+      onFinishGame(historyRef.current, scoreRef.current);
     }
   };
+
+  // ---- 동물의 걸음 상태 ----
+  // 이번 문제의 빈칸 상태가 실제로 준비된 뒤에만 계산한다
+  const isQuestionLoaded = !!currentSentence && loadedSentenceIdRef.current === currentSentence.id;
+  const totalSlots = currentSentence ? currentSentence.words.length : 0;
+  const filledSlots = isQuestionLoaded ? placedWords.filter(Boolean).length : 0;
+  // 모든 빈칸이 실제로 채워졌는가 (문제 로드 직전 빈 배열 상태를 걸러낸다)
+  const allSlotsFilled =
+    isQuestionLoaded && placedWords.length > 0 && placedWords.every((w) => w !== null);
+  // 단어를 놓을 때마다 앞으로, 빼면 뒤로. 일몰/정답 순간에는 그때의 위치를 유지한다.
+  const liveProgress = totalSlots > 0 ? filledSlots / totalSlots : 0;
+  const animalProgress = isQuestionLoaded ? walkFromProgress ?? liveProgress : 0;
+  // 오답을 확인한 직후에만 갸웃거린다. 학습자가 빈칸을 고치면 바로 풀린다.
+  const isAnimalConfused = feedbackStatus === 'wrong' && wrongIndices.length > 0;
 
   return (
     <div className="flex flex-col justify-between h-full min-h-[620px] w-full max-w-md mx-auto p-3 sm:p-4 select-none relative">
@@ -429,7 +445,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
         <div className="flex items-center justify-between px-3 py-1 bg-amber-800 text-amber-100 rounded-t-2xl border-t-2 border-x-2 border-amber-900 shadow-xs">
           <div className="flex items-center gap-1.5 text-xs font-black">
             <Compass className="w-3.5 h-3.5 text-amber-300" />
-            <span>🏡 {currentAnimal.name}의 집으로 가는 길 표지판</span>
+            <span>{currentAnimal.name}에게 집 가는 길을 알려 주세요</span>
           </div>
           <button
             onClick={() => setShowHint(!showHint)}
@@ -475,10 +491,10 @@ export const GameScreen: React.FC<GameScreenProps> = ({
             <div className="text-[11px] font-bold text-amber-900 mb-1.5 flex items-center justify-between">
               <span className="flex items-center gap-1">
                 <MapPin className="w-3 h-3 text-amber-700" />
-                <span>안내할 어순 (터치하여 회수 가능)</span>
+                <span>길 안내 문장</span>
               </span>
               <span className="text-[10px] text-amber-800">
-                {placedWords.filter(Boolean).length} / {currentSentence.words.length} 단어
+                {filledSlots} / {totalSlots} 단어
               </span>
             </div>
 
@@ -515,12 +531,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
                       {idx + 1}
                     </span>
 
-                    {/* Word text or placeholder */}
-                    {word ? (
-                      <span className="tracking-tight">{word}</span>
-                    ) : (
-                      <span className="text-[11px] text-amber-400/80 font-medium">빈칸</span>
-                    )}
+                    {/* Word text (빈 자리는 번호 배지만으로 충분하다) */}
+                    {word && <span className="tracking-tight">{word}</span>}
 
                     {/* Wrong slot indicator badge */}
                     {isWrong && (
@@ -593,8 +605,8 @@ export const GameScreen: React.FC<GameScreenProps> = ({
               )}
             </motion.div>
           ) : (
-            <p className="text-[11px] text-stone-500 font-medium text-center">
-              아래 단어 조각을 터치하여 올바른 순서로 길을 밝혀주세요!
+            <p className="text-[11px] text-stone-500 font-medium text-center leading-relaxed">
+              아래 단어를 순서대로 터치하세요 · 놓인 단어를 터치하면 되돌아와요
             </p>
           )}
         </AnimatePresence>
@@ -603,7 +615,7 @@ export const GameScreen: React.FC<GameScreenProps> = ({
       {/* 5. Word Pieces Pool (단어 조각 선택 - 4~7개 하단 가로 배열) */}
       <div className="w-full bg-stone-100/90 p-2.5 rounded-2xl border border-stone-200/90 shadow-inner">
         <div className="flex items-center justify-between px-1 mb-1.5">
-          <span className="text-[11px] font-bold text-stone-600">단어 조각 선택</span>
+          <span className="text-[11px] font-bold text-stone-600">단어 조각</span>
           <button
             onClick={handleResetSlots}
             disabled={feedbackStatus === 'correct' || feedbackStatus === 'timeout'}
@@ -626,9 +638,15 @@ export const GameScreen: React.FC<GameScreenProps> = ({
               {piece.text}
             </motion.button>
           ))}
-          {availableWords.length === 0 && (
+          {/* 빈칸이 실제로 모두 채워졌을 때만 안내한다
+              (문제가 바뀐 직후 한 프레임 동안 빈 배열이라 예전에는 잘못 떴다) */}
+          {availableWords.length === 0 && allSlotsFilled && (
             <span className="text-xs text-stone-400 font-medium py-1">
-              모든 단어가 놓였습니다! 아래 [길 안내 완료]를 누르세요.
+              {feedbackStatus === 'timeout'
+                ? '바른 문장을 읽어 보고 [다음 동물 돕기]를 눌러 주세요.'
+                : feedbackStatus === 'correct'
+                ? ' '
+                : '모든 단어가 놓였습니다! 아래 [길 안내 완료]를 누르세요.'}
             </span>
           )}
         </div>
@@ -646,6 +664,9 @@ export const GameScreen: React.FC<GameScreenProps> = ({
               : 'wandering'
           }
           timeLeft={timeLeft}
+          progress={animalProgress}
+          isConfused={isAnimalConfused}
+          questionKey={currentSentence.id}
         />
       </div>
 
