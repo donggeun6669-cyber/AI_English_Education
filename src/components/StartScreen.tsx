@@ -77,7 +77,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           transition={{ duration: 0.4 }}
           className="text-3xl sm:text-4xl font-black tracking-tight text-amber-950 drop-shadow-sm flex items-center justify-center gap-2"
         >
-          <span>Help Animals Home!</span>
+          <span>Help Animals Find Their Way Home!</span>
           <span className="text-3xl">🏡</span>
         </motion.h1>
 
