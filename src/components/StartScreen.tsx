@@ -1,6 +1,6 @@
 import React from 'react';
 import { motion } from 'motion/react';
-import { Play, Volume2, VolumeX, Sparkles, BookOpen, ShieldCheck, Clock, Award } from 'lucide-react';
+import { Play, Volume2, VolumeX, Sparkles, BookOpen, ShieldCheck, Clock, Award, Tag } from 'lucide-react';
 import { GameLevel } from '../types';
 import { LEVEL_CONFIGS } from '../data/sentences';
 import { ANIMALS } from '../data/animals';
@@ -15,6 +15,8 @@ interface StartScreenProps {
   onToggleMute: () => void;
   totalRescuedCount: number;
   highScore: number;
+  nickname: string;
+  onNicknameChange: (val: string) => void;
 }
 
 export const StartScreen: React.FC<StartScreenProps> = ({
@@ -26,6 +28,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   onToggleMute,
   totalRescuedCount,
   highScore,
+  nickname,
+  onNicknameChange,
 }) => {
   return (
     <div className="flex flex-col items-center justify-between min-h-[580px] h-full w-full max-w-md mx-auto p-4 sm:p-5 relative select-none">
@@ -105,6 +109,31 @@ export const StartScreen: React.FC<StartScreenProps> = ({
           ))}
         </div>
 
+        {/* Class Nickname Input (Above Start Button) */}
+        <div className="w-full max-w-xs mb-3 text-left">
+          <label htmlFor="class-nickname-input" className="block text-xs font-bold text-stone-700 mb-1 flex items-center justify-between">
+            <span className="flex items-center gap-1.5">
+              <Tag className="w-3.5 h-3.5 text-amber-600" />
+              <span>수업 닉네임 (Class Nickname)</span>
+            </span>
+            <span className="text-[10px] text-stone-400 font-normal">
+              {nickname.length}/20
+            </span>
+          </label>
+          <input
+            id="class-nickname-input"
+            type="text"
+            value={nickname}
+            maxLength={20}
+            onChange={(e) => onNicknameChange(e.target.value)}
+            placeholder="e.g. BlueTiger"
+            className="w-full px-3.5 py-2 rounded-xl bg-white/95 border border-amber-300 text-stone-800 text-sm font-semibold placeholder:text-stone-400 placeholder:font-normal focus:outline-none focus:ring-2 focus:ring-amber-400/50 focus:border-amber-500 shadow-2xs transition-all"
+          />
+          <p className="mt-1 text-[10.5px] text-stone-500 font-medium">
+            수업에서 정한 닉네임만 적어주세요. (실제 이름이나 학번은 쓰지 마세요)
+          </p>
+        </div>
+
         {/* Big Start Button */}
         <motion.button
           whileHover={{ scale: 1.03 }}
@@ -130,6 +159,16 @@ export const StartScreen: React.FC<StartScreenProps> = ({
             <Clock className="w-3.5 h-3.5 text-orange-600" />
             <span>1회 3분 완성</span>
           </div>
+        </div>
+
+        {/* Notice for Students / Class Progress */}
+        <div className="mt-3.5 w-full max-w-xs text-center px-3 py-2 rounded-xl bg-amber-100/70 border border-amber-200/80 text-stone-600">
+          <p className="text-[11px] font-medium leading-relaxed text-stone-700">
+            &ldquo;We save only your class nickname, play count, and how many sentences you got right or wrong, so your teacher can see your progress. Please do not use your real name.&rdquo;
+          </p>
+          <p className="mt-1 text-[10.5px] text-stone-500 font-normal">
+            (선생님이 연습 기록을 볼 수 있도록 수업 닉네임, 게임 횟수, 맞힌 문장·틀린 문장 수만 저장해요. 실제 이름은 쓰지 마세요.)
+          </p>
         </div>
       </div>
 
