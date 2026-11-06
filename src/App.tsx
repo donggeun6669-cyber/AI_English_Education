@@ -84,8 +84,28 @@ export default function App() {
       const correctCount = history.filter((h) => h.isCorrect).length;
       const wrongCount = history.filter((h) => !h.isCorrect).length;
       const cleanNickname = nickname.trim() || 'Guest';
+
+      // Format current time in Korea standard time (Asia/Seoul) as "yyyy-MM-dd HH:mm:ss"
+      const now = new Date();
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Seoul',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: false,
+      }).formatToParts(now);
+
+      const partMap: Record<string, string> = {};
+      parts.forEach((p) => {
+        partMap[p.type] = p.value;
+      });
+      const koreaTimestamp = `${partMap.year}-${partMap.month}-${partMap.day} ${partMap.hour}:${partMap.minute}:${partMap.second}`;
+
       const payload = {
-        timestamp: new Date().toISOString(),
+        timestamp: koreaTimestamp,
         nickname: cleanNickname,
         play_count: nextPlayCount,
         correct_count: correctCount,
